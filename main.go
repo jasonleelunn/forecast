@@ -7,19 +7,21 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
 type model struct {
-	table  table.Model
-	status int
-	body   string
-	err    error
+	textInput textinput.Model
+	table     table.Model
+	err       error
 }
 
 type location struct {
@@ -47,25 +49,74 @@ func (rows Rows) Swap(i, j int) {
 	rows[i], rows[j] = rows[j], rows[i]
 }
 
+const baseUrl = "http://datapoint.metoffice.gov.uk/public/data/"
+
+var apiKey = os.Getenv("MET_OFFICE_API_KEY")
+
 var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("240"))
 
-const baseUrl = "http://datapoint.metoffice.gov.uk/public/data/"
+var placenames []string
+var rows Rows
 
-func main() {
-	endpoint := "val/wxfcs/all/json/sitelist"
-
-	url := makeUrl(endpoint)
-
-	rows := fetchData(url)
-
-	if rows == nil {
-		log.Fatal("Could not fetch row data.")
+func makeUrl(endpoint string, paramList ...string) string {
+	params := ""
+	for _, param := range paramList {
+		params += "&" + param
 	}
 
+	return baseUrl + endpoint + "?key=" + apiKey + params
+}
+
+func fetchData(url string) []byte {
+	c := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	res, err := c.Get(url)
+
+	if err != nil {
+		fmt.Println("Error fetching endpoint:", err)
+		return nil
+	}
+
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println("Error reading body:", err)
+		return nil
+	}
+
+	return body
+}
+
+func extractRows(body []byte) Rows {
+	var data struct {
+		Locations locations `json:"locations"`
+	}
+
+	err := json.Unmarshal(body, &data)
+	if err != nil {
+		fmt.Println("Error decoding JSON:", err)
+		return nil
+	}
+
+	for _, location := range data.Locations.Location {
+		placenames = append(placenames, location.Name)
+		rows = append(rows, table.Row{location.Name, location.Id, location.Region})
+	}
+
+	slices.Sort(placenames)
+	sort.Sort(rows)
+
+	return rows
+}
+
+func setupTable(rows Rows) table.Model {
 	columns := []table.Column{
-		{Title: "Name", Width: 30},
+		{Title: "Name", Width: 40},
 		{Title: "ID", Width: 10},
 		{Title: "Region", Width: 10},
 	}
@@ -73,7 +124,7 @@ func main() {
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
-		table.WithFocused(true),
+		table.WithFocused(false),
 		table.WithHeight(20),
 	)
 
@@ -89,90 +140,138 @@ func main() {
 		Bold(false)
 	t.SetStyles(s)
 
-	m := model{table: t}
+	return t
+}
+
+func setupTextInput() textinput.Model {
+	ti := textinput.New()
+	ti.Placeholder = "Search for a placename"
+	ti.Focus()
+	ti.CharLimit = 156
+	ti.Width = 60
+
+	return ti
+}
+
+func initialModel() model {
+	endpoint := "val/wxfcs/all/json/sitelist"
+	url := makeUrl(endpoint)
+	res := fetchData(url)
+	if res == nil {
+		log.Fatal("Could not fetch sitelist data.")
+	}
+
+	rows := extractRows(res)
+
+	t := setupTable(rows)
+	ti := setupTextInput()
+
+	return model{
+		textInput: ti,
+		table:     t,
+	}
+}
+
+func (m model) Init() tea.Cmd {
+	return textinput.Blink
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	var textInputCmd tea.Cmd
+	var tableCmd tea.Cmd
+
+	m.textInput, textInputCmd = m.textInput.Update(msg)
+	m.table, tableCmd = m.table.Update(msg)
+
+	cmds = append(cmds, textInputCmd, tableCmd)
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			var cmd tea.Cmd
+
+			if m.textInput.Focused() {
+				m.textInput.Blur()
+				m.table.Focus()
+			} else if m.table.Focused() {
+				id := m.table.SelectedRow()[1]
+
+				endpoint := "val/wxfcs/all/json/" + id
+				url := makeUrl(endpoint, "res=daily")
+				cmd = tea.Printf(url)
+				res := fetchData(url)
+				if res == nil {
+					log.Fatal("Could not fetch site data.")
+				}
+
+				var data struct {
+					Site Site `json:"SiteRep"`
+				}
+
+				err := json.Unmarshal(res, &data)
+				if err != nil {
+					log.Fatal("Error decoding JSON:", err)
+				}
+
+				var forecasts string
+
+				for _, period := range data.Site.Info.Location.Periods {
+					for _, forecast := range period.Forecasts {
+						code := forecast.WeatherCode
+						forecasts += WeatherCodes[code]
+					}
+				}
+
+				cmd = tea.Printf(forecasts)
+
+			}
+
+			return m, tea.Batch(
+				cmd,
+			)
+		case "esc":
+			if m.table.Focused() {
+				m.table.Blur()
+				m.textInput.Focus()
+			}
+		case "ctrl+c":
+			return m, tea.Quit
+		default:
+			input := m.textInput.Value()
+
+			if len(input) > 0 {
+				matchedNames := fuzzy.RankFindFold(input, placenames)
+				sort.Sort(matchedNames)
+
+				var filteredRows Rows
+
+				for _, rankedMatch := range matchedNames {
+					index := rankedMatch.OriginalIndex
+					filteredRows = append(filteredRows, rows[index])
+				}
+
+				m.table.SetRows(filteredRows)
+			} else {
+				m.table.SetRows(rows)
+			}
+
+		}
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m model) View() string {
+	return baseStyle.Render(m.textInput.View()) + "\n" + baseStyle.Render(m.table.View()) + "\n(ctrl+c to quit)\n"
+}
+
+func main() {
+	m := initialModel()
 	p := tea.NewProgram(m)
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func (m model) Init() tea.Cmd {
-	return nil
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
-			} else {
-				m.table.Focus()
-			}
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		case "enter":
-			return m, tea.Batch(
-				tea.Printf("Let's go to %s!", m.table.SelectedRow()[0]),
-			)
-		}
-	}
-
-	m.table, cmd = m.table.Update(msg)
-	return m, cmd
-}
-
-func (m model) View() string {
-	return baseStyle.Render(m.table.View()) + "\n"
-}
-
-func makeUrl(endpoint string) string {
-	apiKey := os.Getenv("MET_OFFICE_API_KEY")
-	return baseUrl + endpoint + "?key=" + apiKey
-}
-
-func fetchData(url string) Rows {
-	c := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	res, err := c.Get(url)
-
-	if err != nil {
-		fmt.Println("Error fetching endpoint:", err)
-		return nil
-	}
-
-	defer res.Body.Close() // nolint:errcheck	// Read the response body
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		fmt.Println("Error reading body:", err)
-		return nil
-	}
-
-	var data struct {
-		Locations locations `json:"locations"`
-	}
-
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		fmt.Println("Error decoding JSON:", err)
-		return nil
-	}
-
-	var rows Rows
-
-	for _, location := range data.Locations.Location {
-		rows = append(rows, table.Row{location.Name, location.Id, location.Region})
-	}
-
-	sort.Sort(rows)
-
-	return rows
 }
