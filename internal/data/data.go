@@ -35,9 +35,17 @@ var WeatherCodes = map[string]string{
 }
 
 type Forecast struct {
-	UV            string `json:"U"`
+	Time          string `json:"$"`
 	WeatherCode   string `json:"W"`
-	Precipitation string `json:"Pp"`
+	UV            string `json:"U"`
+	Visibility    string `json:"V"`
+	WindDirection string `json:"D"`
+	WindSpeed     string `json:"S"`
+	Precipitation string `json:"PPd"`
+	Temperature   string `json:"Dm"`
+	FeelsLikeTemp string `json:"FDm"`
+	Humidity      string `json:"Hn"`
+	GustSpeed     string `json:"Gn"`
 }
 
 type Period struct {
@@ -75,4 +83,8 @@ type Meta struct {
 type Site struct {
 	MetaInfo Meta `json:"Wx"`
 	Info     Info `json:"DV"`
+}
+
+type SiteData struct {
+	Site Site `json:"SiteRep"`
 }
