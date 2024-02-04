@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -21,6 +22,8 @@ import (
 )
 
 type model struct {
+	width          int
+	height         int
 	err            error
 	textInput      textinput.Model
 	table          table.Model
@@ -143,7 +146,6 @@ func setupTable(rows Rows) table.Model {
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(false),
-		table.WithHeight(20),
 	)
 
 	s := table.DefaultStyles()
@@ -231,6 +233,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 		h, v := listStyle.GetFrameSize()
 		m.list.SetSize(msg.Width-h, msg.Height-v)
 	}
@@ -355,7 +360,10 @@ func (m model) View() string {
 }
 
 func searchView(m model) string {
-	return baseStyle.Render(m.textInput.View()) + "\n" + baseStyle.Render(m.table.View())
+	components := baseStyle.Render(m.textInput.View()) + "\n" + baseStyle.Render(m.table.View())
+
+	gap := strings.Repeat(" ", max(0, (m.width-lipgloss.Width(components))/2))
+	return lipgloss.JoinHorizontal(lipgloss.Center, gap, components)
 }
 
 func locationView(m model) string {
