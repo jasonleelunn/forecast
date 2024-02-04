@@ -35,17 +35,27 @@ var WeatherCodes = map[string]string{
 }
 
 type Forecast struct {
+	// these fields are always present in a 'Rep' object
 	Time          string `json:"$"`
 	WeatherCode   string `json:"W"`
 	UV            string `json:"U"`
-	Visibility    string `json:"V"`
 	WindDirection string `json:"D"`
 	WindSpeed     string `json:"S"`
-	Precipitation string `json:"PPd"`
-	Temperature   string `json:"Dm"`
-	FeelsLikeTemp string `json:"FDm"`
-	Humidity      string `json:"Hn"`
-	GustSpeed     string `json:"Gn"`
+
+	// "Day" only fields
+	Visibility       string `json:"V"`
+	PrecipitationDay string `json:"PPd"`
+	TemperatureDay   string `json:"Dm"`
+	FeelsLikeTempDay string `json:"FDm"`
+	HumidityDay      string `json:"Hn"`
+	GustSpeedDay     string `json:"Gn"`
+
+	// "Night" only fields
+	PrecipitationNight string `json:"PPn"`
+	TemperatureNight   string `json:"Nm"`
+	FeelsLikeTempNight string `json:"FNm"`
+	HumidityNight      string `json:"Hm"`
+	GustSpeedNight     string `json:"Gm"`
 }
 
 type Period struct {

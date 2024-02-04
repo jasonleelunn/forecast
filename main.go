@@ -282,7 +282,21 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 							log.Fatal("Failed to parse date", err)
 						}
 
-						item := forecastItem{title: date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")", desc: data.WeatherCodes[code]}
+						var temp string
+
+						if forecast.Time == "Day" {
+							temp = forecast.TemperatureDay
+						} else {
+							temp = forecast.TemperatureNight
+						}
+
+						wind := forecast.WindSpeed
+
+						desc := data.WeatherCodes[code]
+						desc += " | " + temp + "°C"
+						desc += " | " + wind + "mph"
+
+						item := forecastItem{title: date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")", desc: desc}
 
 						forecasts = append(forecasts, item)
 					}
@@ -371,7 +385,7 @@ func locationView(m model) string {
 }
 
 func forecastView(m model) string {
-	return listStyle.Render(m.siteData.Site.Info.Location.Periods[0].Forecasts[0].Precipitation + "% chance of rain")
+	return listStyle.Render(m.siteData.Site.Info.Location.Periods[0].Forecasts[0].PrecipitationDay + "% chance of rain")
 }
 
 func main() {
