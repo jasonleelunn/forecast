@@ -1,4 +1,4 @@
-module github.com/jasonleelunn/weather-tui
+module github.com/jasonleelunn/forecast
 
 go 1.21.1
 

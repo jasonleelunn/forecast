@@ -1,4 +1,4 @@
-package main
+package data
 
 var WeatherCodes = map[string]string{
 	"0":  "Clear night",

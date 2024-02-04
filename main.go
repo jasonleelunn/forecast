@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jasonleelunn/forecast/internal/data"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
@@ -206,21 +207,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					log.Fatal("Could not fetch site data.")
 				}
 
-				var data struct {
-					Site Site `json:"SiteRep"`
+				var siteData struct {
+					Site data.Site `json:"SiteRep"`
 				}
 
-				err := json.Unmarshal(res, &data)
+				err := json.Unmarshal(res, &siteData)
 				if err != nil {
 					log.Fatal("Error decoding JSON:", err)
 				}
 
 				var forecasts string
 
-				for _, period := range data.Site.Info.Location.Periods {
+				for _, period := range siteData.Site.Info.Location.Periods {
 					for _, forecast := range period.Forecasts {
 						code := forecast.WeatherCode
-						forecasts += WeatherCodes[code]
+						forecasts += data.WeatherCodes[code]
 					}
 				}
 
