@@ -181,6 +181,8 @@ func setupList() list.Model {
 	li.SetFilteringEnabled(false)
 	li.SetShowTitle(true)
 	li.SetShowStatusBar(false)
+	// remove the default list Quit key bind of 'Esc'
+	li.KeyMap.Quit.Unbind()
 
 	return li
 }
@@ -352,6 +354,8 @@ func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			item := m.list.SelectedItem().(forecastItem)
 			periodIndex, forecastIndex := item.Position()
 			m.forecastData = m.siteData.Site.Info.Location.Periods[periodIndex].Forecasts[forecastIndex]
+		case "esc":
+			m.locationChosen = false
 		}
 	}
 
@@ -362,7 +366,17 @@ func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func updateForecast(msg tea.Msg, m model) (tea.Model, tea.Cmd) { return m, nil }
+func updateForecast(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.forecastChosen = false
+		}
+	}
+
+	return m, nil
+}
 
 func (m model) View() string {
 	var s string
