@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -237,10 +238,10 @@ func getSiteData(siteId string, resolution resolution) data.SiteData {
 	return siteData
 }
 
-func getForecastListItems(siteData data.SiteData) []list.Item {
+func getForecastListItems(m model) []list.Item {
 	var forecasts []list.Item
 
-	for pIndex, period := range siteData.Site.Info.Location.Periods {
+	for pIndex, period := range m.siteData.Site.Info.Location.Periods {
 		for fIndex, forecast := range period.Forecasts {
 			code := forecast.WeatherCode
 
@@ -249,9 +250,11 @@ func getForecastListItems(siteData data.SiteData) []list.Item {
 				log.Fatal("Failed to parse date", err)
 			}
 
+			var forecastTime = forecast.Time
 			var temp string
 
-			if forecast.Time == "Day" {
+			// TODO: simplify data response interface to hide day/night/hourly differences
+			if forecastTime == "Day" {
 				temp = forecast.TemperatureDay
 			} else {
 				temp = forecast.TemperatureNight
@@ -263,7 +266,19 @@ func getForecastListItems(siteData data.SiteData) []list.Item {
 			desc += " | " + temp + "°C"
 			desc += " | " + wind + "mph"
 
-			title := date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")"
+			if m.forecastResolution == threeHourlyResolution {
+				// Time is represented as minutes past midnight here
+				// so convert to 24hr clock representation instead
+				minutes, err := strconv.Atoi(forecastTime)
+				if err != nil {
+					log.Fatal("Couldn't convert time", err)
+				}
+
+				hours := minutes / 60
+				forecastTime = fmt.Sprintf("%02d:00", hours)
+			}
+
+			title := date.Format("Mon, 02 Jan 2006") + " (" + forecastTime + ")"
 
 			item := forecastItem{title: title, desc: desc, periodIndex: pIndex, forecastIndex: fIndex}
 
@@ -324,7 +339,7 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				m.locationId = m.table.SelectedRow()[1]
 
 				m.siteData = getSiteData(m.locationId, m.forecastResolution)
-				forecasts := getForecastListItems(m.siteData)
+				forecasts := getForecastListItems(m)
 				cmd := m.list.SetItems(forecasts)
 
 				m.list.Title = m.siteData.Site.Info.Location.Name + ", " + m.siteData.Site.Info.Location.Country
@@ -385,7 +400,7 @@ func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			}
 
 			m.siteData = getSiteData(m.locationId, m.forecastResolution)
-			forecasts := getForecastListItems(m.siteData)
+			forecasts := getForecastListItems(m)
 			cmd := m.list.SetItems(forecasts)
 			cmds = append(cmds, cmd)
 		case "esc":
