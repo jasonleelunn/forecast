@@ -22,16 +22,18 @@ import (
 )
 
 type model struct {
-	width          int
-	height         int
-	err            error
-	textInput      textinput.Model
-	table          table.Model
-	list           list.Model
-	siteData       data.SiteData
-	locationChosen bool
-	forecastChosen bool
-	forecastData   data.Forecast
+	width              int
+	height             int
+	err                error
+	textInput          textinput.Model
+	table              table.Model
+	list               list.Model
+	siteData           data.SiteData
+	locationChosen     bool
+	locationId         string
+	forecastResolution resolution
+	forecastChosen     bool
+	forecastData       data.Forecast
 }
 
 type location struct {
@@ -69,7 +71,14 @@ func (rows Rows) Swap(i, j int) {
 	rows[i], rows[j] = rows[j], rows[i]
 }
 
-const baseUrl = "http://datapoint.metoffice.gov.uk/public/data/"
+type resolution string
+
+const (
+	baseUrl = "http://datapoint.metoffice.gov.uk/public/data/"
+
+	dailyResolution       resolution = "daily"
+	threeHourlyResolution resolution = "3hourly"
+)
 
 var apiKey = os.Getenv("MET_OFFICE_API_KEY")
 
@@ -202,15 +211,17 @@ func initialModel() model {
 	li := setupList()
 
 	return model{
-		textInput: ti,
-		table:     t,
-		list:      li,
+		textInput:          ti,
+		table:              t,
+		list:               li,
+		forecastResolution: dailyResolution,
 	}
 }
 
-func getSiteData(siteId string) data.SiteData {
+func getSiteData(siteId string, resolution resolution) data.SiteData {
 	endpoint := "val/wxfcs/all/json/" + siteId
-	url := makeUrl(endpoint, "res=daily")
+	param := "res=" + string(resolution)
+	url := makeUrl(endpoint, param)
 	res := fetchData(url)
 	if res == nil {
 		log.Fatal("Could not fetch site data.")
@@ -224,6 +235,43 @@ func getSiteData(siteId string) data.SiteData {
 	}
 
 	return siteData
+}
+
+func getForecastListItems(siteData data.SiteData) []list.Item {
+	var forecasts []list.Item
+
+	for pIndex, period := range siteData.Site.Info.Location.Periods {
+		for fIndex, forecast := range period.Forecasts {
+			code := forecast.WeatherCode
+
+			date, err := time.Parse("2006-01-02Z", period.Date)
+			if err != nil {
+				log.Fatal("Failed to parse date", err)
+			}
+
+			var temp string
+
+			if forecast.Time == "Day" {
+				temp = forecast.TemperatureDay
+			} else {
+				temp = forecast.TemperatureNight
+			}
+
+			wind := forecast.WindSpeed
+
+			desc := data.WeatherCodes[code]
+			desc += " | " + temp + "°C"
+			desc += " | " + wind + "mph"
+
+			title := date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")"
+
+			item := forecastItem{title: title, desc: desc, periodIndex: pIndex, forecastIndex: fIndex}
+
+			forecasts = append(forecasts, item)
+		}
+	}
+
+	return forecasts
 }
 
 func (m model) Init() tea.Cmd {
@@ -272,44 +320,13 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				m.textInput.Blur()
 				m.table.Focus()
 			} else if m.table.Focused() {
-				id := m.table.SelectedRow()[1]
-
-				m.siteData = getSiteData(id)
-
-				var forecasts []list.Item
-
-				for pIndex, period := range m.siteData.Site.Info.Location.Periods {
-					for fIndex, forecast := range period.Forecasts {
-						code := forecast.WeatherCode
-
-						date, err := time.Parse("2006-01-02Z", period.Date)
-						if err != nil {
-							log.Fatal("Failed to parse date", err)
-						}
-
-						var temp string
-
-						if forecast.Time == "Day" {
-							temp = forecast.TemperatureDay
-						} else {
-							temp = forecast.TemperatureNight
-						}
-
-						wind := forecast.WindSpeed
-
-						desc := data.WeatherCodes[code]
-						desc += " | " + temp + "°C"
-						desc += " | " + wind + "mph"
-
-						item := forecastItem{title: date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")", desc: desc, periodIndex: pIndex, forecastIndex: fIndex}
-
-						forecasts = append(forecasts, item)
-					}
-				}
-
 				m.locationChosen = true
+				m.locationId = m.table.SelectedRow()[1]
 
+				m.siteData = getSiteData(m.locationId, m.forecastResolution)
+				forecasts := getForecastListItems(m.siteData)
 				cmd := m.list.SetItems(forecasts)
+
 				m.list.Title = m.siteData.Site.Info.Location.Name + ", " + m.siteData.Site.Info.Location.Country
 
 				return m, cmd
@@ -345,6 +362,12 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 }
 
 func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	var listCmd tea.Cmd
+	m.list, listCmd = m.list.Update(msg)
+	cmds = append(cmds, listCmd)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -354,16 +377,23 @@ func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			item := m.list.SelectedItem().(forecastItem)
 			periodIndex, forecastIndex := item.Position()
 			m.forecastData = m.siteData.Site.Info.Location.Periods[periodIndex].Forecasts[forecastIndex]
+		case "r":
+			if m.forecastResolution == dailyResolution {
+				m.forecastResolution = threeHourlyResolution
+			} else {
+				m.forecastResolution = dailyResolution
+			}
+
+			m.siteData = getSiteData(m.locationId, m.forecastResolution)
+			forecasts := getForecastListItems(m.siteData)
+			cmd := m.list.SetItems(forecasts)
+			cmds = append(cmds, cmd)
 		case "esc":
 			m.locationChosen = false
 		}
 	}
 
-	var cmd tea.Cmd
-
-	m.list, cmd = m.list.Update(msg)
-
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 func updateForecast(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
