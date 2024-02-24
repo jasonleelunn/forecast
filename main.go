@@ -31,6 +31,7 @@ type model struct {
 	siteData       data.SiteData
 	locationChosen bool
 	forecastChosen bool
+	forecastData   data.Forecast
 }
 
 type location struct {
@@ -44,12 +45,14 @@ type locations struct {
 }
 
 type forecastItem struct {
-	title, desc string
+	title, desc                string
+	periodIndex, forecastIndex int
 }
 
-func (i forecastItem) Title() string       { return i.title }
-func (i forecastItem) Description() string { return i.desc }
-func (i forecastItem) FilterValue() string { return i.title }
+func (i forecastItem) Title() string        { return i.title }
+func (i forecastItem) Description() string  { return i.desc }
+func (i forecastItem) FilterValue() string  { return i.title }
+func (i forecastItem) Position() (int, int) { return i.periodIndex, i.forecastIndex }
 
 type Rows []table.Row
 
@@ -273,8 +276,8 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 				var forecasts []list.Item
 
-				for _, period := range m.siteData.Site.Info.Location.Periods {
-					for _, forecast := range period.Forecasts {
+				for pIndex, period := range m.siteData.Site.Info.Location.Periods {
+					for fIndex, forecast := range period.Forecasts {
 						code := forecast.WeatherCode
 
 						date, err := time.Parse("2006-01-02Z", period.Date)
@@ -296,7 +299,7 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 						desc += " | " + temp + "°C"
 						desc += " | " + wind + "mph"
 
-						item := forecastItem{title: date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")", desc: desc}
+						item := forecastItem{title: date.Format("Mon, 02 Jan 2006") + " (" + forecast.Time + ")", desc: desc, periodIndex: pIndex, forecastIndex: fIndex}
 
 						forecasts = append(forecasts, item)
 					}
@@ -344,9 +347,11 @@ func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			// index := m.list.Index()
-
 			m.forecastChosen = true
+
+			item := m.list.SelectedItem().(forecastItem)
+			periodIndex, forecastIndex := item.Position()
+			m.forecastData = m.siteData.Site.Info.Location.Periods[periodIndex].Forecasts[forecastIndex]
 		}
 	}
 
@@ -385,7 +390,20 @@ func locationView(m model) string {
 }
 
 func forecastView(m model) string {
-	return listStyle.Render(m.siteData.Site.Info.Location.Periods[0].Forecasts[0].PrecipitationDay + "% chance of rain")
+	period := m.list.SelectedItem().(forecastItem).Title()
+	title := m.siteData.Site.Info.Location.Name + " - " + period
+
+	// TODO: handle Night data as well + prettier rendering
+	forecast := data.WeatherCodes[m.forecastData.WeatherCode] + "\n" +
+		m.forecastData.PrecipitationDay + "% chance of rain" + "\n" +
+		m.forecastData.TemperatureDay + "°C" + "\n" +
+		m.forecastData.WindSpeed + "mph Wind" + "\n" +
+		m.forecastData.WindDirection + " Wind Direction" + "\n" +
+		m.forecastData.HumidityDay + "% Humidity" + "\n"
+
+	text := title + "\n\n" + forecast
+
+	return listStyle.Render(text)
 }
 
 func main() {
