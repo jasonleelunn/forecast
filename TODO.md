@@ -3,14 +3,15 @@ Planned `forecast` features and ideas
 
 ---
 
-## Forecast resolution choice
-- choose between daily and 3hourly API options
+## Styling
+- consistent styling between views
+- fix table highlight persisting
+- fix list artefacts
 
 ---
 
 ## Single forecast page details
 - simple design, show all information returned by API
-- return to all site forecasts
 - start new search (global command?)
 
 ---
