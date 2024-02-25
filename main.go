@@ -34,7 +34,7 @@ type model struct {
 	locationId         string
 	forecastResolution resolution
 	forecastChosen     bool
-	forecastData       data.Forecast
+	forecastData       forecastData
 }
 
 type location struct {
@@ -50,6 +50,20 @@ type locations struct {
 type forecastItem struct {
 	title, desc                string
 	periodIndex, forecastIndex int
+}
+
+type forecastData struct {
+	Time          string
+	WeatherCode   string
+	UV            string
+	WindDirection string
+	WindSpeed     string
+	Visibility    string
+	Precipitation string
+	Humidity      string
+	GustSpeed     string
+	Temperature   string
+	FeelsLikeTemp string
 }
 
 func (i forecastItem) Title() string        { return i.title }
@@ -93,6 +107,52 @@ var (
 
 var placenames []string
 var rows Rows
+
+// flatten Forecast JSON object returned by API into a consistent format
+func getForecastData(m model, f data.Forecast) forecastData {
+	if m.forecastResolution == dailyResolution && f.Time == "Day" {
+		return forecastData{
+			Time:          f.Time,
+			WeatherCode:   f.WeatherCode,
+			WindDirection: f.WindDirection,
+			WindSpeed:     f.WindSpeed,
+			Visibility:    f.Visibility,
+			UV:            f.Day.UV,
+			Precipitation: f.Day.Precipitation,
+			Humidity:      f.Day.Humidity,
+			GustSpeed:     f.Day.GustSpeed,
+			Temperature:   f.Day.Temperature,
+			FeelsLikeTemp: f.Day.FeelsLikeTemp,
+		}
+	} else if m.forecastResolution == dailyResolution && f.Time == "Night" {
+		return forecastData{
+			Time:          f.Time,
+			WeatherCode:   f.WeatherCode,
+			WindDirection: f.WindDirection,
+			WindSpeed:     f.WindSpeed,
+			Visibility:    f.Visibility,
+			Precipitation: f.Night.Precipitation,
+			Humidity:      f.Night.Humidity,
+			GustSpeed:     f.Night.GustSpeed,
+			Temperature:   f.Night.Temperature,
+			FeelsLikeTemp: f.Night.FeelsLikeTemp,
+		}
+	} else {
+		return forecastData{
+			Time:          f.Time,
+			WeatherCode:   f.WeatherCode,
+			WindDirection: f.WindDirection,
+			WindSpeed:     f.WindSpeed,
+			Visibility:    f.Visibility,
+			UV:            f.Hourly.UV,
+			Precipitation: f.Hourly.Precipitation,
+			Humidity:      f.Hourly.Humidity,
+			GustSpeed:     f.Hourly.GustSpeed,
+			Temperature:   f.Hourly.Temperature,
+			FeelsLikeTemp: f.Hourly.FeelsLikeTemp,
+		}
+	}
+}
 
 func makeUrl(endpoint string, paramList ...string) string {
 	params := ""
@@ -242,29 +302,20 @@ func getForecastListItems(m model) []list.Item {
 	var forecasts []list.Item
 
 	for pIndex, period := range m.siteData.Site.Info.Location.Periods {
+		date, err := time.Parse("2006-01-02Z", period.Date)
+		if err != nil {
+			log.Fatal("Failed to parse date", err)
+		}
+
 		for fIndex, forecast := range period.Forecasts {
-			code := forecast.WeatherCode
+			forecastData := getForecastData(m, forecast)
 
-			date, err := time.Parse("2006-01-02Z", period.Date)
-			if err != nil {
-				log.Fatal("Failed to parse date", err)
-			}
-
-			var forecastTime = forecast.Time
-			var temp string
-
-			// TODO: simplify data response interface to hide day/night/hourly differences
-			if forecastTime == "Day" {
-				temp = forecast.TemperatureDay
-			} else {
-				temp = forecast.TemperatureNight
-			}
-
-			wind := forecast.WindSpeed
-
+			code := forecastData.WeatherCode
 			desc := data.WeatherCodes[code]
-			desc += " | " + temp + "°C"
-			desc += " | " + wind + "mph"
+			desc += " | " + forecastData.Temperature + "°C"
+			desc += " | " + forecastData.WindSpeed + "mph"
+
+			var forecastTime = forecastData.Time
 
 			if m.forecastResolution == threeHourlyResolution {
 				// Time is represented as minutes past midnight here
@@ -273,7 +324,6 @@ func getForecastListItems(m model) []list.Item {
 				if err != nil {
 					log.Fatal("Couldn't convert time", err)
 				}
-
 				hours := minutes / 60
 				forecastTime = fmt.Sprintf("%02d:00", hours)
 			}
@@ -391,8 +441,11 @@ func updateLocation(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 			item := m.list.SelectedItem().(forecastItem)
 			periodIndex, forecastIndex := item.Position()
-			m.forecastData = m.siteData.Site.Info.Location.Periods[periodIndex].Forecasts[forecastIndex]
+			forecast := m.siteData.Site.Info.Location.Periods[periodIndex].Forecasts[forecastIndex]
+
+			m.forecastData = getForecastData(m, forecast)
 		case "r":
+			// switch forecast list resolution
 			if m.forecastResolution == dailyResolution {
 				m.forecastResolution = threeHourlyResolution
 			} else {
@@ -452,13 +505,13 @@ func forecastView(m model) string {
 	period := m.list.SelectedItem().(forecastItem).Title()
 	title := m.siteData.Site.Info.Location.Name + " - " + period
 
-	// TODO: handle Night data as well + prettier rendering
+	// TODO: prettier rendering
 	forecast := data.WeatherCodes[m.forecastData.WeatherCode] + "\n" +
-		m.forecastData.PrecipitationDay + "% chance of rain" + "\n" +
-		m.forecastData.TemperatureDay + "°C" + "\n" +
+		m.forecastData.Precipitation + "% chance of rain" + "\n" +
+		m.forecastData.Temperature + "°C" + "\n" +
 		m.forecastData.WindSpeed + "mph Wind" + "\n" +
 		m.forecastData.WindDirection + " Wind Direction" + "\n" +
-		m.forecastData.HumidityDay + "% Humidity" + "\n"
+		m.forecastData.Humidity + "% Humidity" + "\n"
 
 	text := title + "\n\n" + forecast
 

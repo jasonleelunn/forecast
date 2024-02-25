@@ -1,65 +1,82 @@
 package data
 
+// see https://www.metoffice.gov.uk/binaries/content/assets/metofficegovuk/pdf/data/datapoint_api_reference.pdf
+// for full API schema details
+
+// some codes are duplicated for (day) and (night)
 var WeatherCodes = map[string]string{
 	"0":  "Clear night",
 	"1":  "Sunny day",
-	"2":  "Partly cloudy (night)",
-	"3":  "Partly cloudy (day)",
+	"2":  "Partly cloudy",
+	"3":  "Partly cloudy",
 	"4":  "Not used",
 	"5":  "Mist",
 	"6":  "Fog",
 	"7":  "Cloudy",
 	"8":  "Overcast",
-	"9":  "Light rain shower (night)",
-	"10": "Light rain shower (day)",
+	"9":  "Light rain shower",
+	"10": "Light rain shower",
 	"11": "Drizzle",
 	"12": "Light rain",
-	"13": "Heavy rain shower (night)",
-	"14": "Heavy rain shower (day)",
+	"13": "Heavy rain shower",
+	"14": "Heavy rain shower",
 	"15": "Heavy rain",
-	"16": "Sleet shower (night)",
-	"17": "Sleet shower (day)",
+	"16": "Sleet shower",
+	"17": "Sleet shower",
 	"18": "Sleet",
-	"19": "Hail shower (night)",
-	"20": "Hail shower (day)",
+	"19": "Hail shower",
+	"20": "Hail shower",
 	"21": "Hail",
-	"22": "Light snow shower (night)",
-	"23": "Light snow shower (day)",
+	"22": "Light snow shower",
+	"23": "Light snow shower",
 	"24": "Light snow",
-	"25": "Heavy snow shower (night)",
-	"26": "Heavy snow shower (day)",
+	"25": "Heavy snow shower",
+	"26": "Heavy snow shower",
 	"27": "Heavy snow",
-	"28": "Thunder shower (night)",
-	"29": "Thunder shower (day)",
+	"28": "Thunder shower",
+	"29": "Thunder shower",
 	"30": "Thunder",
 }
 
 type Forecast struct {
-	// these fields are always present in a 'Rep' object
 	Time          string `json:"$"`
 	WeatherCode   string `json:"W"`
-	UV            string `json:"U"`
+	Visibility    string `json:"V"`
 	WindDirection string `json:"D"`
 	WindSpeed     string `json:"S"`
+	Day
+	Night
+	Hourly
+}
 
-	// "Day" only fields
-	Visibility       string `json:"V"`
-	PrecipitationDay string `json:"PPd"`
-	TemperatureDay   string `json:"Dm"`
-	FeelsLikeTempDay string `json:"FDm"`
-	HumidityDay      string `json:"Hn"`
-	GustSpeedDay     string `json:"Gn"`
+type Day struct {
+	UV            string `json:"U"`
+	Precipitation string `json:"PPd"`
+	Humidity      string `json:"Hn"`
+	GustSpeed     string `json:"Gn"`
+	Temperature   string `json:"Dm"`
+	FeelsLikeTemp string `json:"FDm"`
+}
 
-	// "Night" only fields
-	PrecipitationNight string `json:"PPn"`
-	TemperatureNight   string `json:"Nm"`
-	FeelsLikeTempNight string `json:"FNm"`
-	HumidityNight      string `json:"Hm"`
-	GustSpeedNight     string `json:"Gm"`
+type Night struct {
+	Precipitation string `json:"PPn"`
+	Humidity      string `json:"Hm"`
+	GustSpeed     string `json:"Gm"`
+	Temperature   string `json:"Nm"`
+	FeelsLikeTemp string `json:"FNm"`
+}
+
+type Hourly struct {
+	UV            string `json:"U"`
+	Precipitation string `json:"Pp"`
+	Humidity      string `json:"H"`
+	GustSpeed     string `json:"G"`
+	Temperature   string `json:"T"`
+	FeelsLikeTemp string `json:"F"`
 }
 
 type Period struct {
-	Length    string     `json:"type"`
+	Time      string     `json:"type"`
 	Date      string     `json:"value"`
 	Forecasts []Forecast `json:"Rep"`
 }
