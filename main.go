@@ -3,9 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"slices"
 	"sort"
@@ -163,29 +161,6 @@ func makeUrl(endpoint string, paramList ...string) string {
 	return baseUrl + endpoint + "?key=" + apiKey + params
 }
 
-func fetchData(url string) []byte {
-	c := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	res, err := c.Get(url)
-
-	if err != nil {
-		fmt.Println("Error fetching endpoint:", err)
-		return nil
-	}
-
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		fmt.Println("Error reading body:", err)
-		return nil
-	}
-
-	return body
-}
-
 func extractRows(body []byte) Rows {
 	var data struct {
 		Locations locations `json:"locations"`
@@ -260,7 +235,7 @@ func setupList() list.Model {
 func initialModel() model {
 	endpoint := "val/wxfcs/all/json/sitelist"
 	url := makeUrl(endpoint)
-	res := fetchData(url)
+	res := data.Fetch(url)
 	if res == nil {
 		log.Fatal("Could not fetch sitelist data.")
 	}
@@ -283,7 +258,7 @@ func getSiteData(siteId string, resolution resolution) data.SiteData {
 	endpoint := "val/wxfcs/all/json/" + siteId
 	param := "res=" + string(resolution)
 	url := makeUrl(endpoint, param)
-	res := fetchData(url)
+	res := data.Fetch(url)
 	if res == nil {
 		log.Fatal("Could not fetch site data.")
 	}

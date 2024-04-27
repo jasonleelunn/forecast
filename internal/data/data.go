@@ -1,5 +1,12 @@
 package data
 
+import (
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+)
+
 // see https://www.metoffice.gov.uk/binaries/content/assets/metofficegovuk/pdf/data/datapoint_api_reference.pdf
 // for full API schema details
 
@@ -114,4 +121,27 @@ type Site struct {
 
 type SiteData struct {
 	Site Site `json:"SiteRep"`
+}
+
+func Fetch(url string) []byte {
+	c := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	res, err := c.Get(url)
+
+	if err != nil {
+		fmt.Println("Error fetching endpoint:", err)
+		return nil
+	}
+
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println("Error reading body:", err)
+		return nil
+	}
+
+	return body
 }
