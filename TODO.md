@@ -4,6 +4,8 @@
 
 ## Tests
 
+- refactor main file into separate modules for easier testing
+
 ---
 
 ## Styling
