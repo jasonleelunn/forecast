@@ -9,8 +9,8 @@
 ## Styling
 
 - consistent styling between views
-- fix table highlight persisting
-- fix list artefacts
+- adaptive to height and width of viewport
+- decode region to full text string
 
 ---
 

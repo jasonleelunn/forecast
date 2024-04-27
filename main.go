@@ -86,6 +86,8 @@ func (rows Rows) Swap(i, j int) {
 
 type resolution string
 
+type color int
+
 const (
 	baseUrl = "http://datapoint.metoffice.gov.uk/public/data/"
 
@@ -93,18 +95,43 @@ const (
 	threeHourlyResolution resolution = "3hourly"
 )
 
-var apiKey = os.Getenv("MET_OFFICE_API_KEY")
-
-var (
-	baseStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240"))
-
-	listStyle = lipgloss.NewStyle().Margin(1, 2)
+const (
+	black color = iota
+	white
+	grey
+	green
+	blue
+	yellow
+	pink
+	purple
 )
 
-var placenames []string
-var rows Rows
+var (
+	apiKey = os.Getenv("MET_OFFICE_API_KEY")
+
+	colorPalette = map[color]string{
+		black:  "#000",
+		white:  "#ffffff",
+		grey:   "#dddddf",
+		green:  "#98FF98",
+		blue:   "#a9def9",
+		yellow: "#fcf6bd",
+		pink:   "#ff99c8",
+		purple: "#e4c1f9",
+	}
+
+	borderStyle = lipgloss.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color(colorPalette[blue]))
+
+	listStyle = lipgloss.NewStyle().Margin(1, 2)
+
+	tableStyle         table.Styles
+	tableStyleFocussed table.Styles
+
+	placenames []string
+	rows       Rows
+)
 
 // flatten Forecast JSON object returned by API into a consistent format
 func getForecastData(m model, f data.Forecast) forecastData {
@@ -196,17 +223,26 @@ func setupTable(rows Rows) table.Model {
 		table.WithFocused(false),
 	)
 
-	s := table.DefaultStyles()
-	s.Header = s.Header.
+	headerStyle := lipgloss.NewStyle().
+		Padding(0, 1).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(lipgloss.Color(colorPalette[blue])).
 		BorderBottom(true).
 		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+
+	tableStyle = table.DefaultStyles()
+	tableStyle.Header = headerStyle
+	tableStyle.Selected = lipgloss.NewStyle()
+
+	tableStyleFocussed = table.DefaultStyles()
+	tableStyleFocussed.Header = headerStyle
+	tableStyleFocussed.Selected = tableStyleFocussed.Selected.
+		Foreground(lipgloss.Color(colorPalette[black])).
+		Background(lipgloss.Color(colorPalette[green])).
 		Bold(false)
-	t.SetStyles(s)
+
+	// table is out of focus on load
+	t.SetStyles(tableStyle)
 
 	return t
 }
@@ -216,7 +252,6 @@ func setupTextInput() textinput.Model {
 	ti.Placeholder = "Search for a placename"
 	ti.Focus()
 	ti.CharLimit = 156
-	ti.Width = 60
 
 	return ti
 }
@@ -359,6 +394,7 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			if m.textInput.Focused() {
 				m.textInput.Blur()
 				m.table.Focus()
+				m.table.SetStyles(tableStyleFocussed)
 			} else if m.table.Focused() {
 				m.locationChosen = true
 				m.locationId = m.table.SelectedRow()[1]
@@ -374,6 +410,7 @@ func updateSearch(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case "esc":
 			if m.table.Focused() {
 				m.table.Blur()
+				m.table.SetStyles(tableStyle)
 				m.textInput.Focus()
 			}
 		default:
@@ -462,14 +499,24 @@ func (m model) View() string {
 		s += searchView(m)
 	}
 
-	return s + "\n(ctrl+c to quit)\n"
+	return s
 }
 
 func searchView(m model) string {
-	components := baseStyle.Render(m.textInput.View()) + "\n" + baseStyle.Render(m.table.View())
+	renderedTable := borderStyle.Render(m.table.View())
 
+	// set the text input width to match the table
+	// the text input width is not the full rendered width,
+	// just the number of chars in the input field type so
+	// we need to adjust by the width of the prompt and border area
+	textInputPadding := 5
+	m.textInput.Width = lipgloss.Width(renderedTable) - textInputPadding
+
+	components := borderStyle.Render(m.textInput.View()) + "\n" + renderedTable
+
+	// horizontally center the entire view
 	gap := strings.Repeat(" ", max(0, (m.width-lipgloss.Width(components))/2))
-	return lipgloss.JoinHorizontal(lipgloss.Center, gap, components)
+	return lipgloss.JoinHorizontal(lipgloss.Left, gap, components)
 }
 
 func locationView(m model) string {
