@@ -31,3 +31,9 @@ go build
 ```sh
 ./forecast
 ```
+
+## Usage
+
+- Press Enter to move to the next view
+- Press Esc to move to the previous view
+- Press Ctrl+c to exit
