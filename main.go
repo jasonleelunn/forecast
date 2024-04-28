@@ -107,8 +107,6 @@ const (
 )
 
 var (
-	apiKey = os.Getenv("MET_OFFICE_API_KEY")
-
 	colorPalette = map[color]string{
 		black:  "#000",
 		white:  "#ffffff",
@@ -131,7 +129,20 @@ var (
 
 	placenames []string
 	rows       Rows
+
+	apiKey string
 )
+
+func getApiKey() string {
+	apiKey, ok := os.LookupEnv("MET_OFFICE_API_KEY")
+
+	if !ok {
+		log.Fatal("MET_OFFICE_API_KEY env var not set")
+		os.Exit(1)
+	}
+
+	return apiKey
+}
 
 // flatten Forecast JSON object returned by API into a consistent format
 func getForecastData(m model, f data.Forecast) forecastData {
@@ -541,6 +552,8 @@ func forecastView(m model) string {
 }
 
 func main() {
+	apiKey = getApiKey()
+
 	m := initialModel()
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
