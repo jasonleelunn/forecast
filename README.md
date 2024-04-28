@@ -6,7 +6,7 @@ U.K. weather forecasts, in your terminal :sunny: :cloud_with_lightning_and_rain:
 
 ## Running locally
 
-- Register for a Met Office DataPoint API key [here](https://register.metoffice.gov.uk/WaveRegistrationClient/public/register.do?service=datapoint)
+- Register for a [Met Office DataPoint](https://www.metoffice.gov.uk/services/data/datapoint) API key [here](https://register.metoffice.gov.uk/WaveRegistrationClient/public/register.do?service=datapoint)
 - Add the API key to your env
 
 ```sh
